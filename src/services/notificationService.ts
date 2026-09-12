@@ -3,17 +3,33 @@
  * Dispatches real-time alerts whenever a customer requests a job, an artisan registers,
  * or a construction project inquiry is submitted.
  *
- * Supports:
- * - Direct Zapier Catch Hook dispatch
- * - Pre-formatted email bodies so phone numbers and details always display effortlessly
+ * Security & Reliability Best Practices:
+ * - No hardcoded webhook secrets or personal email credentials in source code.
+ * - Managed strictly through environment variables (VITE_NOTIFICATION_WEBHOOK_URL, VITE_ADMIN_EMAIL).
+ * - Client-side dispatch rate-limiting to protect against script looping.
  */
 
 import { CustomerJobRequest, Artisan, ConstructionProject, Review } from '../types';
 
-const DEFAULT_ZAPIER_WEBHOOK_URL = 'https://hooks.zapier.com/hooks/catch/28820895/4d4ytj7/';
-const NOTIFICATION_WEBHOOK_URL =
-  import.meta.env.VITE_NOTIFICATION_WEBHOOK_URL || DEFAULT_ZAPIER_WEBHOOK_URL;
-const ADMIN_EMAIL = 'shvrk44@gmail.com';
+const NOTIFICATION_WEBHOOK_URL = import.meta.env.VITE_NOTIFICATION_WEBHOOK_URL || '';
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'admin@ng-artisans.com';
+
+// Client-side rate-limiting: allow at most 5 notifications per 60 seconds per session
+const MAX_REQUESTS_PER_WINDOW = 5;
+const WINDOW_DURATION_MS = 60 * 1000;
+let requestTimestamps: number[] = [];
+
+function checkRateLimit(): boolean {
+  const now = Date.now();
+  // Filter out timestamps outside the current window
+  requestTimestamps = requestTimestamps.filter(t => now - t < WINDOW_DURATION_MS);
+  if (requestTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+    console.warn('[Security] Notification rate limit exceeded. Suppressing dispatch.');
+    return false;
+  }
+  requestTimestamps.push(now);
+  return true;
+}
 
 interface NotificationPayload {
   eventType: 'JOB_REQUEST' | 'ARTISAN_REGISTRATION' | 'CONSTRUCTION_PROJECT' | 'REVIEW';
@@ -29,9 +45,13 @@ interface NotificationPayload {
 }
 
 /**
- * Dispatch a notification payload to an external webhook if configured
+ * Dispatch a notification payload to an external webhook if configured in environment
  */
 export async function sendAdminNotification(payload: NotificationPayload): Promise<boolean> {
+  if (!checkRateLimit()) {
+    return false;
+  }
+
   if (NOTIFICATION_WEBHOOK_URL) {
     try {
       await fetch(NOTIFICATION_WEBHOOK_URL, {
@@ -43,11 +63,12 @@ export async function sendAdminNotification(payload: NotificationPayload): Promi
       });
       return true;
     } catch (err) {
-      console.warn('Notification webhook dispatch error:', err);
+      console.warn('Notification webhook dispatch warning:', err);
     }
   }
 
-  console.info(`[ADMIN NOTIFICATION -> ${ADMIN_EMAIL}]:`, payload.title, payload.details);
+  // Audit log in development / preview
+  console.info(`[ADMIN NOTIFICATION -> ${ADMIN_EMAIL}]:`, payload.title);
   return true;
 }
 
@@ -228,6 +249,7 @@ export async function notifyNewReview(review: Review): Promise<void> {
     `CUSTOMER: ${review.customerName}`,
     `RATING:   ${review.rating} / 5 Stars`,
     `SERVICE:  ${review.serviceName}`,
+    `VERIFIED: ${review.jobVerified ? 'Yes (Verified Booking)' : 'No (Community Feedback)'}`,
     `COMMENT:  ${review.comment}`
   ].join('\n');
 

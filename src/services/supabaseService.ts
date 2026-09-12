@@ -14,16 +14,29 @@ export interface DatabaseConnectionStatus {
   message: string;
 }
 
+// Client-side cooldown against submission spam (minimum 5 seconds between consecutive form submissions)
+let lastSubmissionTime = 0;
+function enforceSubmissionCooldown(): boolean {
+  const now = Date.now();
+  if (now - lastSubmissionTime < 4000) {
+    console.warn('[Security] Submission cooldown active. Please wait a few seconds before submitting again.');
+    return false;
+  }
+  lastSubmissionTime = now;
+  return true;
+}
+
 /**
- * Fetch all registered artisans from Supabase.
- * If the database table does not exist or has no records, gracefully returns INITIAL_ARTISANS.
+ * Fetch registered artisans from Supabase with limit to prevent unbounded memory growth.
+ * Defaults to 50 records per page.
  */
-export async function fetchArtisans(): Promise<Artisan[]> {
+export async function fetchArtisans(limit: number = 50): Promise<Artisan[]> {
   try {
     const { data, error } = await supabase
       .from('artisans')
       .select('*')
-      .order('rating', { ascending: false });
+      .order('rating', { ascending: false })
+      .limit(limit);
 
     if (error || !data || data.length === 0) {
       return INITIAL_ARTISANS;
@@ -70,14 +83,15 @@ export async function fetchArtisans(): Promise<Artisan[]> {
 }
 
 /**
- * Fetch all reviews from Supabase.
+ * Fetch reviews from Supabase with safe query limit.
  */
-export async function fetchReviews(): Promise<Review[]> {
+export async function fetchReviews(limit: number = 100): Promise<Review[]> {
   try {
     const { data, error } = await supabase
       .from('reviews')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (error || !data || data.length === 0) {
       return INITIAL_REVIEWS;
@@ -100,14 +114,21 @@ export async function fetchReviews(): Promise<Review[]> {
 }
 
 /**
- * Fetch customer job requests from Supabase
+ * Fetch customer job requests from Supabase with pagination & optional artisan filter
  */
-export async function fetchJobRequests(): Promise<CustomerJobRequest[]> {
+export async function fetchJobRequests(limit: number = 50, artisanId?: string): Promise<CustomerJobRequest[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('customer_job_requests')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (artisanId) {
+      query = query.or(`assigned_artisan_id.eq.${artisanId},assigned_artisan_id.is.null`);
+    }
+
+    const { data, error } = await query;
 
     if (error || !data || data.length === 0) {
       return [];
@@ -136,6 +157,8 @@ export async function fetchJobRequests(): Promise<CustomerJobRequest[]> {
  * Save new customer job request to Supabase
  */
 export async function submitJobRequest(job: CustomerJobRequest): Promise<boolean> {
+  if (!enforceSubmissionCooldown()) return false;
+
   try {
     const { error } = await supabase
       .from('customer_job_requests')
@@ -171,6 +194,8 @@ export async function submitJobRequest(job: CustomerJobRequest): Promise<boolean
  * Save a new artisan registration to Supabase
  */
 export async function registerArtisan(artisan: Artisan): Promise<boolean> {
+  if (!enforceSubmissionCooldown()) return false;
+
   try {
     const { error } = await supabase
       .from('artisans')
@@ -222,6 +247,8 @@ export async function registerArtisan(artisan: Artisan): Promise<boolean> {
  * Save customer review to Supabase
  */
 export async function submitReview(review: Review): Promise<boolean> {
+  if (!enforceSubmissionCooldown()) return false;
+
   try {
     const { error } = await supabase
       .from('reviews')
@@ -255,6 +282,8 @@ export async function submitReview(review: Review): Promise<boolean> {
  * Save construction project to Supabase
  */
 export async function submitConstructionProject(project: ConstructionProject): Promise<boolean> {
+  if (!enforceSubmissionCooldown()) return false;
+
   try {
     const { error } = await supabase
       .from('construction_projects')

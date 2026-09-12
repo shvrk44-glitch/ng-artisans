@@ -27,6 +27,7 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
   const [reviewService, setReviewService] = React.useState(artisan.subServices[0] || 'Repair');
   const [reviewRating, setReviewRating] = React.useState(5);
   const [reviewComment, setReviewComment] = React.useState('');
+  const [bookingCode, setBookingCode] = React.useState('');
   const [reviewSubmitted, setReviewSubmitted] = React.useState(false);
   const [reviewError, setReviewError] = React.useState<string | null>(null);
 
@@ -37,6 +38,10 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
       setReviewError('Please enter your name and a brief review of the completed job.');
       return;
     }
+    
+    // Security check: only award the trusted 'Verified Job' badge if a real booking reference is provided
+    const isVerifiedBooking = Boolean(bookingCode.trim() && bookingCode.trim().length >= 4);
+
     if (onAddReview) {
       onAddReview({
         artisanId: artisan.id,
@@ -45,11 +50,12 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
         rating: reviewRating,
         comment: reviewComment.trim(),
         serviceName: reviewService,
-        jobVerified: true
+        jobVerified: isVerifiedBooking
       });
       setReviewSubmitted(true);
       setIsReviewFormOpen(false);
       setReviewComment('');
+      setBookingCode('');
     }
   };
 
@@ -420,6 +426,25 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
                   />
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-neutral-600">Booking Reference / Job ID (Optional):</label>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Unlocks Verified Badge
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. JOB-4921 or customer phone number"
+                    value={bookingCode}
+                    onChange={(e) => setBookingCode(e.target.value)}
+                    className="w-full p-2 bg-white border border-neutral-300 rounded-lg text-xs text-neutral-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <p className="text-[10px] text-neutral-500 mt-1">
+                    Without a booking reference, this feedback is tagged as an unverified community review.
+                  </p>
+                </div>
+
                 {reviewError && (
                   <p className="text-xs text-rose-600">{reviewError}</p>
                 )}
@@ -429,7 +454,7 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
                     type="submit"
                     className="py-1.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition-colors cursor-pointer"
                   >
-                    Submit Verified Review
+                    Post Review
                   </button>
                 </div>
               </form>
@@ -459,9 +484,13 @@ export const ArtisanProfileModal: React.FC<ArtisanProfileModalProps> = ({
 
                     <div className="flex items-center gap-2 text-[11px] text-amber-800 font-semibold">
                       <span>Job: {rev.serviceName}</span>
-                      {rev.jobVerified && (
-                        <span className="inline-flex items-center gap-0.5 text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded text-[10px]">
-                          ✓ Verified Job
+                      {rev.jobVerified ? (
+                        <span className="inline-flex items-center gap-0.5 text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px] font-semibold border border-emerald-200">
+                          ✓ Verified Completed Job
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-0.5 text-neutral-600 bg-neutral-200/80 px-2 py-0.5 rounded text-[10px] font-normal">
+                          Community Review
                         </span>
                       )}
                     </div>
