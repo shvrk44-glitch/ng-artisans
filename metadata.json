@@ -1,0 +1,10 @@
+{
+  "name": "ng-artisans",
+  "description": "Local skilled-services discovery and connection platform connecting customers with verified plumbers, electricians, and building construction professionals.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
